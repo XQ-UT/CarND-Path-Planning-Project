@@ -241,9 +241,20 @@ int main() {
 
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
-
-
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
+
+						const auto car_frenet =  getFrenet(car_x, car_y, car_yaw, map_waypoints_x, map_waypoints_y);
+			
+						double dist_inc = 0.5;
+    				for(int i = 0; i < 50; i++)
+						{
+							car_s += dist_inc;
+							auto new_xy = getXY(car_s, car_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+
+          		next_x_vals.push_back(new_xy[0]);
+          		next_y_vals.push_back(new_xy[1]);
+    				}
+
           	msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
 
