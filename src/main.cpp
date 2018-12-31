@@ -23,11 +23,10 @@ double rad2deg(double x) { return x * 180 / pi(); }
 
 constexpr double LANE_WIDTH_METERS = 4.0;
 constexpr int INITIAL_LANE_ID = 1;
-constexpr int TRAJECTORY_LENGHT = 50;
+constexpr int TRAJECTORY_LENGTH = 50;
 constexpr double SIMULATION_PERIOD_SECS = 0.02;
 constexpr double TARGET_SPEED_MPH = 49.0;
 constexpr double MPH_TO_METERS_PER_SECOND = 0.447;
-constexpr double TOO_CLOSE_DISTANCE_METERS = 30.0;
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -180,8 +179,37 @@ bool in_same_lane(double my_car_d, double other_car_d){
 }
 
 /// Returns true when other car is in in front and close of my car.
-bool close_and_in_front(double my_car_s, double other_car_s){
-	return other_car_s >= my_car_s && other_car_s - my_car_s <= TOO_CLOSE_DISTANCE_METERS;
+bool close_and_in_front(double my_car_s, double other_car_s, double too_close_distance_meters){
+	return other_car_s >= my_car_s && other_car_s - my_car_s <= too_close_distance_meters;
+}
+
+/// Converts points in global coordinates to vehicle coordinates.
+void convert_points_to_vehicle_coordinates(vector<double>& pts_x, vector<double>& pts_y, 
+			const double car_x, const double car_y, const double car_yaw)
+{
+	for(int i = 0; i < pts_x.size(); ++i)
+	{
+		double shift_x = pts_x[i] - car_x;
+		double shift_y = pts_y[i] - car_y;
+		pts_x[i] = shift_x * cos(0 - car_yaw) - shift_y * sin(0 - car_yaw);
+		pts_y[i] = shift_x * sin(0 - car_yaw) + shift_y * cos(0 - car_yaw);
+
+		cout << "ptsx: " << pts_x[i] << ", ptsy: " << pts_y[i] << endl;
+	}
+}
+
+/// Converts point in vehicle coordinates to global coordinates.
+void convert_point_to_global_coordinates(double& x, double& y, 	
+			const double car_x, const double car_y, const double car_yaw){
+	
+	double original_x = x;
+	double original_y = y;
+
+	x = original_x * cos(car_yaw) - original_y * sin(car_yaw);
+	y = original_x * sin(car_yaw) + original_y * cos(car_yaw);
+
+	x += car_x;
+	y += car_y;
 }
 
 int main() {
@@ -266,11 +294,11 @@ int main() {
 
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
+            int previous_path_size = previous_path_x.size();
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
 						bool too_close = false;
 						bool left_lane_change_safe =  curr_lane != 0;
 						bool right_lane_change_safe = curr_lane != 2;
-						int previous_path_size = previous_path_x.size();
 
 						double future_car_s = car_s + previous_path_size * SIMULATION_PERIOD_SECS * curr_speed_mph * MPH_TO_METERS_PER_SECOND;
 						double future_car_d = curr_lane * LANE_WIDTH_METERS + LANE_WIDTH_METERS / 2;
@@ -286,13 +314,15 @@ int main() {
 							tracked_car_x += previous_path_size * SIMULATION_PERIOD_SECS * tracked_car_vx;
 							tracked_car_y += previous_path_size * SIMULATION_PERIOD_SECS * tracked_car_vy;
 							
-							// Assume tracked car has same yaw wtih my car.
-							auto future_tracked_car_frenet = getFrenet(tracked_car_x, tracked_car_y, car_yaw, map_waypoints_x, map_waypoints_y);
+							auto future_tracked_car_frenet = getFrenet(tracked_car_x, tracked_car_y, 
+																												 atan2(tracked_car_vy, tracked_car_vx), 
+																												 map_waypoints_x, 
+																												 map_waypoints_y);
 							double future_tracked_car_s = future_tracked_car_frenet[0];
 							double future_tracked_car_d = future_tracked_car_frenet[1];
 							
 							if(in_same_lane(future_car_d, future_tracked_car_d) 
-									&& close_and_in_front(future_car_s, future_tracked_car_s))
+									&& close_and_in_front(future_car_s, future_tracked_car_s, 30.0))
 							{
 								too_close = true;
 								continue;
@@ -300,13 +330,19 @@ int main() {
 
 							// check whether it is safe for left lane change.
 							if(in_same_lane(future_car_d - LANE_WIDTH_METERS, future_tracked_car_d)
-									&& close_and_in_front(future_car_s, future_tracked_car_s)) {	
+									&& (close_and_in_front(future_car_s, future_tracked_car_s, 20.0) 
+											 || close_and_in_front(future_tracked_car_s, future_car_s, 20.0)
+										 )
+							) {	
 								left_lane_change_safe = false;
 							}
 
 							// check whether it is safe for right lane change.
 							if(in_same_lane(future_car_d + LANE_WIDTH_METERS, future_tracked_car_d)
-									&& close_and_in_front(future_car_s, future_tracked_car_s)) {
+									&& (close_and_in_front(future_car_s, future_tracked_car_s, 20.0) 
+												|| close_and_in_front(future_tracked_car_s, future_car_s, 20.0)
+										 )
+							) {
 								right_lane_change_safe = false;
 							}
 						}
@@ -331,16 +367,93 @@ int main() {
 							curr_speed_mph += 0.2;		
 						}
 
-						double next_car_s = car_s;
-						double next_car_d = LANE_WIDTH_METERS * curr_lane + LANE_WIDTH_METERS / 2;
-    				for(int i = 0; i < 50; i++)
-						{
-							next_car_s += curr_speed_mph * MPH_TO_METERS_PER_SECOND * SIMULATION_PERIOD_SECS;
-							auto new_xy = getXY(next_car_s, next_car_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+					
 
-          		next_x_vals.push_back(new_xy[0]);
-          		next_y_vals.push_back(new_xy[1]);
+						// Choose anchor points.
+						vector<double> pts_x;
+						vector<double> pts_y;
+						double ref_x = car_x;
+						double ref_y = car_y;
+						double ref_yaw = deg2rad(car_yaw);
+						if(previous_path_size >= 2)
+						{
+							ref_x = previous_path_x[previous_path_size - 1];
+							ref_y = previous_path_y[previous_path_size - 1];
+							double ref_x_prev = previous_path_x[previous_path_size - 2];
+							double ref_y_prev = previous_path_y[previous_path_size - 2];
+							ref_yaw = atan2(ref_y - ref_y_prev,  ref_x - ref_x_prev);
+
+							pts_x.push_back(ref_x_prev);
+							pts_x.push_back(ref_x);
+
+							pts_y.push_back(ref_y_prev);
+							pts_y.push_back(ref_y);
+
+						} 
+						else 
+						{
+							double ref_x_prev = car_x - SIMULATION_PERIOD_SECS * cos(ref_yaw) * curr_speed_mph * MPH_TO_METERS_PER_SECOND;
+							double ref_y_prev = car_y - SIMULATION_PERIOD_SECS * sin(ref_yaw) * curr_speed_mph * MPH_TO_METERS_PER_SECOND;
+
+							pts_x.push_back(ref_x_prev);
+							pts_x.push_back(ref_x);
+
+							pts_y.push_back(ref_y_prev);
+							pts_y.push_back(ref_y);
+						}
+						cout << "ref_x: " << ref_x << ", ref_y: " << ref_y << ", ref_yaw: " << ref_yaw << endl; 
+
+						double new_d = curr_lane * LANE_WIDTH_METERS + 0.5 * LANE_WIDTH_METERS;
+						vector<double> new_wp1 = getXY(car_s + 30, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+						vector<double> new_wp2 = getXY(car_s + 60, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+						vector<double> new_wp3 = getXY(car_s + 90, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+
+						pts_x.push_back(new_wp1[0]);
+						pts_x.push_back(new_wp2[0]);
+						pts_x.push_back(new_wp3[0]);
+
+						pts_y.push_back(new_wp1[1]);	
+						pts_y.push_back(new_wp2[1]);	
+						pts_y.push_back(new_wp3[1]);	
+
+						// Fit anchor points in vehicle coordinate.
+						convert_points_to_vehicle_coordinates(pts_x, pts_y, ref_x, ref_y, ref_yaw);
+						tk::spline s;
+						s.set_points(pts_x, pts_y);
+						cout << "fit ok" << endl;
+
+						// Use previous path.
+						for(int i = 0; i < previous_path_size; ++i)
+						{
+							next_x_vals.push_back(previous_path_x[i]);
+							next_y_vals.push_back(previous_path_y[i]);
+						}
+
+						double target_x = 30.0;
+						double target_y = s(target_x);
+						double target_distance = sqrt(target_x * target_x + target_y * target_y);
+						int slice = target_distance / (curr_speed_mph * MPH_TO_METERS_PER_SECOND * SIMULATION_PERIOD_SECS);
+						double x_unit = target_x / slice;
+						cout << "slice: " << slice  << endl;
+						cout << "x_unit: " << x_unit  << endl;
+
+    				for(int i = 0; i < TRAJECTORY_LENGTH - previous_path_size; ++i)
+						{
+							double new_x = x_unit * (i + 1);
+							double new_y = s(new_x);
+
+							convert_point_to_global_coordinates(new_x, new_y, ref_x, ref_y, ref_yaw);							
+          		next_x_vals.push_back(new_x);
+          		next_y_vals.push_back(new_y);
     				}
+
+						
+						cout << "##### Print Path #####" << endl;
+						for(int i = 0; i < next_x_vals.size(); ++i)
+						{
+							cout << "path x: " << next_x_vals[i] << ", path y: " << next_y_vals[i] << endl;
+						}
+						cout << "path len: " << next_x_vals.size() << endl;
 
           	msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
