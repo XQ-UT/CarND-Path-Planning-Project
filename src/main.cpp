@@ -212,6 +212,16 @@ void convert_point_to_global_coordinates(double& x, double& y,
 	y += car_y;
 }
 
+/// print trajectory points.
+void print_trajectory(const vector<double>& next_x_vals, const vector<double>& next_y_vals){
+	cout << "##### Print Path #####" << endl;
+	for(int i = 0; i < next_x_vals.size(); ++i)
+	{
+		cout << "path x: " << next_x_vals[i] << ", path y: " << next_y_vals[i] << endl;
+	}
+	cout << "path len: " << next_x_vals.size() << endl;
+}
+
 int main() {
   uWS::Hub h;
 
@@ -331,7 +341,7 @@ int main() {
 							// check whether it is safe for left lane change.
 							if(in_same_lane(future_car_d - LANE_WIDTH_METERS, future_tracked_car_d)
 									&& (close_and_in_front(future_car_s, future_tracked_car_s, 20.0) 
-											 || close_and_in_front(future_tracked_car_s, future_car_s, 20.0)
+											 || close_and_in_front(future_tracked_car_s, future_car_s, 10.0)
 										 )
 							) {	
 								left_lane_change_safe = false;
@@ -340,7 +350,7 @@ int main() {
 							// check whether it is safe for right lane change.
 							if(in_same_lane(future_car_d + LANE_WIDTH_METERS, future_tracked_car_d)
 									&& (close_and_in_front(future_car_s, future_tracked_car_s, 20.0) 
-												|| close_and_in_front(future_tracked_car_s, future_car_s, 20.0)
+												|| close_and_in_front(future_tracked_car_s, future_car_s, 10.0)
 										 )
 							) {
 								right_lane_change_safe = false;
@@ -383,12 +393,12 @@ int main() {
 							double ref_y_prev = previous_path_y[previous_path_size - 2];
 							ref_yaw = atan2(ref_y - ref_y_prev,  ref_x - ref_x_prev);
 
-							pts_x.push_back(ref_x_prev);
-							pts_x.push_back(ref_x);
 
-							pts_y.push_back(ref_y_prev);
-							pts_y.push_back(ref_y);
-
+							for (int j = 0; j < previous_path_size; ++j)
+							{
+								pts_x.push_back(previous_path_x[j]);
+								pts_y.push_back(previous_path_y[j]);
+							}
 						} 
 						else 
 						{
@@ -404,8 +414,8 @@ int main() {
 						cout << "ref_x: " << ref_x << ", ref_y: " << ref_y << ", ref_yaw: " << ref_yaw << endl; 
 
 						double new_d = curr_lane * LANE_WIDTH_METERS + 0.5 * LANE_WIDTH_METERS;
-						vector<double> new_wp1 = getXY(car_s + 30, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-						vector<double> new_wp2 = getXY(car_s + 60, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+						vector<double> new_wp1 = getXY(car_s + 50, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+						vector<double> new_wp2 = getXY(car_s + 70, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 						vector<double> new_wp3 = getXY(car_s + 90, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
 						pts_x.push_back(new_wp1[0]);
@@ -448,13 +458,6 @@ int main() {
     				}
 
 						
-						cout << "##### Print Path #####" << endl;
-						for(int i = 0; i < next_x_vals.size(); ++i)
-						{
-							cout << "path x: " << next_x_vals[i] << ", path y: " << next_y_vals[i] << endl;
-						}
-						cout << "path len: " << next_x_vals.size() << endl;
-
           	msgJson["next_x"] = next_x_vals;
           	msgJson["next_y"] = next_y_vals;
 
