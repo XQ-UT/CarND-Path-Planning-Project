@@ -8,6 +8,7 @@
 #include "Eigen-3.3/Eigen/Core"
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
+#include "spline.h"
 
 using namespace std;
 
@@ -18,6 +19,15 @@ using json = nlohmann::json;
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
+
+
+constexpr double LANE_WIDTH_METERS = 4.0;
+constexpr int INITIAL_LANE_ID = 1;
+constexpr int TRAJECTORY_LENGHT = 50;
+constexpr double SIMULATION_PERIOD_SECS = 0.02;
+constexpr double TARGET_SPEED_MPH = 49.0;
+constexpr double MPH_TO_METERS_PER_SECOND = 0.447;
+constexpr double TOO_CLOSE_DISTANCE_METERS = 30.0;
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -163,8 +173,23 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 
 }
 
+/// Returns true when other car is in the same lane with my car.
+bool in_same_lane(double my_car_d, double other_car_d){
+	return other_car_d >= my_car_d - LANE_WIDTH_METERS / 2 
+									&& other_car_d <= my_car_d + LANE_WIDTH_METERS / 2;
+}
+
+/// Returns true when other car is in in front and close of my car.
+bool close_and_in_front(double my_car_s, double other_car_s){
+	return other_car_s >= my_car_s && other_car_s - my_car_s <= TOO_CLOSE_DISTANCE_METERS;
+}
+
 int main() {
   uWS::Hub h;
+
+	// 0: left lane, 1: middle lane, 2: right lane.
+	int curr_lane = 1;
+	double curr_speed_mph = 0.0;
 
   // Load up map values for waypoint's x,y,s and d normalized normal vectors
   vector<double> map_waypoints_x;
@@ -200,7 +225,7 @@ int main() {
   	map_waypoints_dy.push_back(d_y);
   }
 
-  h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
+  h.onMessage([&curr_speed_mph, &curr_lane, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
@@ -242,14 +267,76 @@ int main() {
           	vector<double> next_x_vals;
           	vector<double> next_y_vals;
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
+						bool too_close = false;
+						bool left_lane_change_safe =  curr_lane != 0;
+						bool right_lane_change_safe = curr_lane != 2;
+						int previous_path_size = previous_path_x.size();
 
-						const auto car_frenet =  getFrenet(car_x, car_y, car_yaw, map_waypoints_x, map_waypoints_y);
-			
-						double dist_inc = 0.5;
+						double future_car_s = car_s + previous_path_size * SIMULATION_PERIOD_SECS * curr_speed_mph * MPH_TO_METERS_PER_SECOND;
+						double future_car_d = curr_lane * LANE_WIDTH_METERS + LANE_WIDTH_METERS / 2;
+						for(const auto& tracked_car : sensor_fusion)
+						{
+							double tracked_car_x = tracked_car[1];
+							double tracked_car_y = tracked_car[2];
+							double tracked_car_vx = tracked_car[3];
+							double tracked_car_vy = tracked_car[4];
+							double tracked_car_s = tracked_car[5];
+							double tracked_car_d = tracked_car[6];							
+							
+							tracked_car_x += previous_path_size * SIMULATION_PERIOD_SECS * tracked_car_vx;
+							tracked_car_y += previous_path_size * SIMULATION_PERIOD_SECS * tracked_car_vy;
+							
+							// Assume tracked car has same yaw wtih my car.
+							auto future_tracked_car_frenet = getFrenet(tracked_car_x, tracked_car_y, car_yaw, map_waypoints_x, map_waypoints_y);
+							double future_tracked_car_s = future_tracked_car_frenet[0];
+							double future_tracked_car_d = future_tracked_car_frenet[1];
+							
+							if(in_same_lane(future_car_d, future_tracked_car_d) 
+									&& close_and_in_front(future_car_s, future_tracked_car_s))
+							{
+								too_close = true;
+								continue;
+							}
+
+							// check whether it is safe for left lane change.
+							if(in_same_lane(future_car_d - LANE_WIDTH_METERS, future_tracked_car_d)
+									&& close_and_in_front(future_car_s, future_tracked_car_s)) {	
+								left_lane_change_safe = false;
+							}
+
+							// check whether it is safe for right lane change.
+							if(in_same_lane(future_car_d + LANE_WIDTH_METERS, future_tracked_car_d)
+									&& close_and_in_front(future_car_s, future_tracked_car_s)) {
+								right_lane_change_safe = false;
+							}
+						}
+
+						if(too_close)
+						{
+							if(left_lane_change_safe)
+							{
+								--curr_lane;
+							} 
+							else if (right_lane_change_safe)
+							{
+								++curr_lane;
+							}
+							else 
+							{
+								curr_speed_mph = max(0.0, curr_speed_mph - 0.2);
+							}
+						}
+						else if(curr_speed_mph < TARGET_SPEED_MPH)
+						{
+							curr_speed_mph += 0.2;		
+						}
+
+						double next_car_s = car_s;
+						double next_car_d = LANE_WIDTH_METERS * curr_lane + LANE_WIDTH_METERS / 2;
     				for(int i = 0; i < 50; i++)
 						{
-							car_s += dist_inc;
-							auto new_xy = getXY(car_s, car_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+							next_car_s += curr_speed_mph * MPH_TO_METERS_PER_SECOND * SIMULATION_PERIOD_SECS;
+							auto new_xy = getXY(next_car_s, next_car_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
           		next_x_vals.push_back(new_xy[0]);
           		next_y_vals.push_back(new_xy[1]);
