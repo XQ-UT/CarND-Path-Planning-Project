@@ -304,159 +304,159 @@ int main() {
           	vector<double> next_y_vals;
             int previous_path_size = previous_path_x.size();
           	// TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
-						bool too_close = false;
-						bool left_lane_change_safe =  curr_lane != 0;
-						bool right_lane_change_safe = curr_lane != 2;
+			bool too_close = false;
+			bool left_lane_change_safe =  curr_lane != 0;
+			bool right_lane_change_safe = curr_lane != 2;
 
-						double future_car_s = car_s + previous_path_size * SIMULATION_PERIOD_SECS * curr_speed_mph * MPH_TO_METERS_PER_SECOND;
-						double future_car_d = curr_lane * LANE_WIDTH_METERS + LANE_WIDTH_METERS / 2;
-						for(const auto& tracked_car : sensor_fusion)
-						{
-							double tracked_car_x = tracked_car[1];
-							double tracked_car_y = tracked_car[2];
-							double tracked_car_vx = tracked_car[3];
-							double tracked_car_vy = tracked_car[4];
-							double tracked_car_s = tracked_car[5];
-							double tracked_car_d = tracked_car[6];							
-							
-							tracked_car_x += previous_path_size * SIMULATION_PERIOD_SECS * tracked_car_vx;
-							tracked_car_y += previous_path_size * SIMULATION_PERIOD_SECS * tracked_car_vy;
-							
-							auto future_tracked_car_frenet = getFrenet(tracked_car_x, tracked_car_y, 
-																												 atan2(tracked_car_vy, tracked_car_vx), 
-																												 map_waypoints_x, 
-																												 map_waypoints_y);
-							double future_tracked_car_s = future_tracked_car_frenet[0];
-							double future_tracked_car_d = future_tracked_car_frenet[1];
-							
-							if(in_same_lane(future_car_d, future_tracked_car_d) 
-									&& close_and_in_front(future_car_s, future_tracked_car_s, 20.0)) 
-							{
-								too_close = true;
-								continue;
-							}
+			double future_car_s = car_s + previous_path_size * SIMULATION_PERIOD_SECS * curr_speed_mph * MPH_TO_METERS_PER_SECOND;
+			double future_car_d = curr_lane * LANE_WIDTH_METERS + LANE_WIDTH_METERS / 2;
+			for(const auto& tracked_car : sensor_fusion)
+			{
+				double tracked_car_x = tracked_car[1];
+				double tracked_car_y = tracked_car[2];
+				double tracked_car_vx = tracked_car[3];
+				double tracked_car_vy = tracked_car[4];
+				double tracked_car_s = tracked_car[5];
+				double tracked_car_d = tracked_car[6];							
+				
+				tracked_car_x += previous_path_size * SIMULATION_PERIOD_SECS * tracked_car_vx;
+				tracked_car_y += previous_path_size * SIMULATION_PERIOD_SECS * tracked_car_vy;
+				
+				auto future_tracked_car_frenet = getFrenet(tracked_car_x, tracked_car_y, 
+															atan2(tracked_car_vy, tracked_car_vx), 
+															map_waypoints_x, 
+															map_waypoints_y);
+				double future_tracked_car_s = future_tracked_car_frenet[0];
+				double future_tracked_car_d = future_tracked_car_frenet[1];
+				
+				if(in_same_lane(future_car_d, future_tracked_car_d) 
+						&& close_and_in_front(future_car_s, future_tracked_car_s, 20.0)) 
+				{
+					too_close = true;
+					continue;
+				}
 
-							// check whether it is safe for left lane change.
-							if(in_same_lane(future_car_d - LANE_WIDTH_METERS, future_tracked_car_d)
-									&& (close_and_in_front(future_car_s, future_tracked_car_s, 20.0) 
-											 || close_and_in_front(future_tracked_car_s, future_car_s, 15.0)
-											 || close_and_in_front(car_s, tracked_car_s, 15.0)
-											 || close_and_in_front(tracked_car_s, car_s, 15.0)
-										 )
-							) {	
-								left_lane_change_safe = false;
-							}
+				// check whether it is safe for left lane change.
+				if(in_same_lane(future_car_d - LANE_WIDTH_METERS, future_tracked_car_d)
+						&& (close_and_in_front(future_car_s, future_tracked_car_s, 20.0) 
+									|| close_and_in_front(future_tracked_car_s, future_car_s, 15.0)
+									|| close_and_in_front(car_s, tracked_car_s, 15.0)
+									|| close_and_in_front(tracked_car_s, car_s, 15.0)
+								)
+				) {	
+					left_lane_change_safe = false;
+				}
 
-							// check whether it is safe for right lane change.
-							if(in_same_lane(future_car_d + LANE_WIDTH_METERS, future_tracked_car_d)
-									&& (close_and_in_front(future_car_s, future_tracked_car_s, 20.0) 
-												|| close_and_in_front(future_tracked_car_s, future_car_s, 15.0)
-											 	|| close_and_in_front(car_s, tracked_car_s, 15.0)
-											 	|| close_and_in_front(tracked_car_s, car_s, 15.0)
-										 )
-							) {
-								right_lane_change_safe = false;
-							}
-						}
+				// check whether it is safe for right lane change.
+				if(in_same_lane(future_car_d + LANE_WIDTH_METERS, future_tracked_car_d)
+						&& (close_and_in_front(future_car_s, future_tracked_car_s, 20.0) 
+									|| close_and_in_front(future_tracked_car_s, future_car_s, 15.0)
+									|| close_and_in_front(car_s, tracked_car_s, 15.0)
+									|| close_and_in_front(tracked_car_s, car_s, 15.0)
+								)
+				) {
+					right_lane_change_safe = false;
+				}
+			}
 
-						if(too_close)
-						{
-							if(left_lane_change_safe)
-							{
-								--curr_lane;
-							} 
-							else if (right_lane_change_safe)
-							{
-								++curr_lane;
-							}
-							else 
-							{
-								curr_speed_mph = max(0.0, curr_speed_mph - 0.2);
-							}
-						}
-						else if(curr_speed_mph < TARGET_SPEED_MPH)
-						{
-							curr_speed_mph += 0.2;		
-						}
+			if(too_close)
+			{
+				if(left_lane_change_safe)
+				{
+					--curr_lane;
+				} 
+				else if (right_lane_change_safe)
+				{
+					++curr_lane;
+				}
+				else 
+				{
+					curr_speed_mph = max(0.0, curr_speed_mph - 0.2);
+				}
+			}
+			else if(curr_speed_mph < TARGET_SPEED_MPH)
+			{
+				curr_speed_mph += 0.2;		
+			}
 
-						cout << "too close: " << too_close 
-									<< ", left_lane_change_safe:" << left_lane_change_safe 
-									<< ", right_lane_change_safe: " << right_lane_change_safe 
-									<< ", target lane: " << curr_lane << endl;
-					
+			cout << "too close: " << too_close 
+						<< ", left_lane_change_safe:" << left_lane_change_safe 
+						<< ", right_lane_change_safe: " << right_lane_change_safe 
+						<< ", target lane: " << curr_lane << endl;
+		
 
-						// Choose anchor points.
-						vector<double> pts_x;
-						vector<double> pts_y;
-						double ref_x = car_x;
-						double ref_y = car_y;
-						double ref_yaw = deg2rad(car_yaw);
-						if(previous_path_size >= 2)
-						{
-							ref_x = previous_path_x[previous_path_size - 1];
-							ref_y = previous_path_y[previous_path_size - 1];
-							double ref_x_prev = previous_path_x[previous_path_size - 2];
-							double ref_y_prev = previous_path_y[previous_path_size - 2];
-							ref_yaw = atan2(ref_y - ref_y_prev,  ref_x - ref_x_prev);
+			// Choose anchor points.
+			vector<double> pts_x;
+			vector<double> pts_y;
+			double ref_x = car_x;
+			double ref_y = car_y;
+			double ref_yaw = deg2rad(car_yaw);
+			if(previous_path_size >= 2)
+			{
+				ref_x = previous_path_x[previous_path_size - 1];
+				ref_y = previous_path_y[previous_path_size - 1];
+				double ref_x_prev = previous_path_x[previous_path_size - 2];
+				double ref_y_prev = previous_path_y[previous_path_size - 2];
+				ref_yaw = atan2(ref_y - ref_y_prev,  ref_x - ref_x_prev);
 
-							pts_x.push_back(ref_x_prev);
-							pts_x.push_back(ref_x);
+				pts_x.push_back(ref_x_prev);
+				pts_x.push_back(ref_x);
 
-							pts_y.push_back(ref_y_prev);
-							pts_y.push_back(ref_y);
-						} 
-						else 
-						{
-							double ref_x_prev = car_x - SIMULATION_PERIOD_SECS * cos(ref_yaw) * curr_speed_mph * MPH_TO_METERS_PER_SECOND;
-							double ref_y_prev = car_y - SIMULATION_PERIOD_SECS * sin(ref_yaw) * curr_speed_mph * MPH_TO_METERS_PER_SECOND;
+				pts_y.push_back(ref_y_prev);
+				pts_y.push_back(ref_y);
+			} 
+			else 
+			{
+				double ref_x_prev = car_x - SIMULATION_PERIOD_SECS * cos(ref_yaw) * curr_speed_mph * MPH_TO_METERS_PER_SECOND;
+				double ref_y_prev = car_y - SIMULATION_PERIOD_SECS * sin(ref_yaw) * curr_speed_mph * MPH_TO_METERS_PER_SECOND;
 
-							pts_x.push_back(ref_x_prev);
-							pts_x.push_back(ref_x);
+				pts_x.push_back(ref_x_prev);
+				pts_x.push_back(ref_x);
 
-							pts_y.push_back(ref_y_prev);
-							pts_y.push_back(ref_y);
-						}
+				pts_y.push_back(ref_y_prev);
+				pts_y.push_back(ref_y);
+			}
 
-						double new_d = curr_lane * LANE_WIDTH_METERS + 0.5 * LANE_WIDTH_METERS;
-						vector<double> new_wp1 = getXY(car_s + 50, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-						vector<double> new_wp2 = getXY(car_s + 70, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
-						vector<double> new_wp3 = getXY(car_s + 90, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			double new_d = curr_lane * LANE_WIDTH_METERS + 0.5 * LANE_WIDTH_METERS;
+			vector<double> new_wp1 = getXY(car_s + 50, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> new_wp2 = getXY(car_s + 70, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
+			vector<double> new_wp3 = getXY(car_s + 90, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
-						pts_x.push_back(new_wp1[0]);
-						pts_x.push_back(new_wp2[0]);
-						pts_x.push_back(new_wp3[0]);
+			pts_x.push_back(new_wp1[0]);
+			pts_x.push_back(new_wp2[0]);
+			pts_x.push_back(new_wp3[0]);
 
-						pts_y.push_back(new_wp1[1]);	
-						pts_y.push_back(new_wp2[1]);	
-						pts_y.push_back(new_wp3[1]);	
+			pts_y.push_back(new_wp1[1]);	
+			pts_y.push_back(new_wp2[1]);	
+			pts_y.push_back(new_wp3[1]);	
 
-						// Fit anchor points in vehicle coordinate.
-						convert_points_to_vehicle_coordinates(pts_x, pts_y, ref_x, ref_y, ref_yaw);
-						tk::spline s;
-						s.set_points(pts_x, pts_y);
+			// Fit anchor points in vehicle coordinate.
+			convert_points_to_vehicle_coordinates(pts_x, pts_y, ref_x, ref_y, ref_yaw);
+			tk::spline s;
+			s.set_points(pts_x, pts_y);
 
-						// Use previous path.
-						for(int i = 0; i < previous_path_size; ++i)
-						{
-							next_x_vals.push_back(previous_path_x[i]);
-							next_y_vals.push_back(previous_path_y[i]);
-						}
+			// Use previous path.
+			for(int i = 0; i < previous_path_size; ++i)
+			{
+				next_x_vals.push_back(previous_path_x[i]);
+				next_y_vals.push_back(previous_path_y[i]);
+			}
 
-						double target_x = 30.0;
-						double target_y = s(target_x);
-						double target_distance = sqrt(target_x * target_x + target_y * target_y);
-						int slice = target_distance / (curr_speed_mph * MPH_TO_METERS_PER_SECOND * SIMULATION_PERIOD_SECS);
-						double x_unit = target_x / slice;
+			double target_x = 30.0;
+			double target_y = s(target_x);
+			double target_distance = sqrt(target_x * target_x + target_y * target_y);
+			int slice = target_distance / (curr_speed_mph * MPH_TO_METERS_PER_SECOND * SIMULATION_PERIOD_SECS);
+			double x_unit = target_x / slice;
 
-    				for(int i = 0; i < TRAJECTORY_LENGTH - previous_path_size; ++i)
-						{
-							double new_x = x_unit * (i + 1);
-							double new_y = s(new_x);
+			for(int i = 0; i < TRAJECTORY_LENGTH - previous_path_size; ++i)
+			{
+				double new_x = x_unit * (i + 1);
+				double new_y = s(new_x);
 
-							convert_point_to_global_coordinates(new_x, new_y, ref_x, ref_y, ref_yaw);							
-          		next_x_vals.push_back(new_x);
-          		next_y_vals.push_back(new_y);
-    				}
+				convert_point_to_global_coordinates(new_x, new_y, ref_x, ref_y, ref_yaw);							
+				next_x_vals.push_back(new_x);
+				next_y_vals.push_back(new_y);
+			}
 
 						
           	msgJson["next_x"] = next_x_vals;
@@ -466,7 +466,6 @@ int main() {
 
           	//this_thread::sleep_for(chrono::milliseconds(1000));
           	ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-          
         }
       } else {
         // Manual driving
