@@ -193,8 +193,6 @@ void convert_points_to_vehicle_coordinates(vector<double>& pts_x, vector<double>
 		double shift_y = pts_y[i] - car_y;
 		pts_x[i] = shift_x * cos(0 - car_yaw) - shift_y * sin(0 - car_yaw);
 		pts_y[i] = shift_x * sin(0 - car_yaw) + shift_y * cos(0 - car_yaw);
-
-		cout << "ptsx: " << pts_x[i] << ", ptsy: " << pts_y[i] << endl;
 	}
 }
 
@@ -210,6 +208,18 @@ void convert_point_to_global_coordinates(double& x, double& y,
 
 	x += car_x;
 	y += car_y;
+}
+
+void get_left_lane_change_trajectory() {
+
+}
+
+void get_right_lane_change_trajectory() {
+
+}
+
+void get_follow_lane_trajectory() {
+
 }
 
 /// print trajectory points.
@@ -332,7 +342,7 @@ int main() {
 							double future_tracked_car_d = future_tracked_car_frenet[1];
 							
 							if(in_same_lane(future_car_d, future_tracked_car_d) 
-									&& close_and_in_front(future_car_s, future_tracked_car_s, 30.0))
+									&& close_and_in_front(future_car_s, future_tracked_car_s, 20.0)) 
 							{
 								too_close = true;
 								continue;
@@ -341,7 +351,9 @@ int main() {
 							// check whether it is safe for left lane change.
 							if(in_same_lane(future_car_d - LANE_WIDTH_METERS, future_tracked_car_d)
 									&& (close_and_in_front(future_car_s, future_tracked_car_s, 20.0) 
-											 || close_and_in_front(future_tracked_car_s, future_car_s, 10.0)
+											 || close_and_in_front(future_tracked_car_s, future_car_s, 15.0)
+											 || close_and_in_front(car_s, tracked_car_s, 15.0)
+											 || close_and_in_front(tracked_car_s, car_s, 15.0)
 										 )
 							) {	
 								left_lane_change_safe = false;
@@ -350,7 +362,9 @@ int main() {
 							// check whether it is safe for right lane change.
 							if(in_same_lane(future_car_d + LANE_WIDTH_METERS, future_tracked_car_d)
 									&& (close_and_in_front(future_car_s, future_tracked_car_s, 20.0) 
-												|| close_and_in_front(future_tracked_car_s, future_car_s, 10.0)
+												|| close_and_in_front(future_tracked_car_s, future_car_s, 15.0)
+											 	|| close_and_in_front(car_s, tracked_car_s, 15.0)
+											 	|| close_and_in_front(tracked_car_s, car_s, 15.0)
 										 )
 							) {
 								right_lane_change_safe = false;
@@ -377,6 +391,10 @@ int main() {
 							curr_speed_mph += 0.2;		
 						}
 
+						cout << "too close: " << too_close 
+									<< ", left_lane_change_safe:" << left_lane_change_safe 
+									<< ", right_lane_change_safe: " << right_lane_change_safe 
+									<< ", target lane: " << curr_lane << endl;
 					
 
 						// Choose anchor points.
@@ -393,12 +411,11 @@ int main() {
 							double ref_y_prev = previous_path_y[previous_path_size - 2];
 							ref_yaw = atan2(ref_y - ref_y_prev,  ref_x - ref_x_prev);
 
+							pts_x.push_back(ref_x_prev);
+							pts_x.push_back(ref_x);
 
-							for (int j = 0; j < previous_path_size; ++j)
-							{
-								pts_x.push_back(previous_path_x[j]);
-								pts_y.push_back(previous_path_y[j]);
-							}
+							pts_y.push_back(ref_y_prev);
+							pts_y.push_back(ref_y);
 						} 
 						else 
 						{
@@ -411,7 +428,6 @@ int main() {
 							pts_y.push_back(ref_y_prev);
 							pts_y.push_back(ref_y);
 						}
-						cout << "ref_x: " << ref_x << ", ref_y: " << ref_y << ", ref_yaw: " << ref_yaw << endl; 
 
 						double new_d = curr_lane * LANE_WIDTH_METERS + 0.5 * LANE_WIDTH_METERS;
 						vector<double> new_wp1 = getXY(car_s + 50, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
@@ -430,7 +446,6 @@ int main() {
 						convert_points_to_vehicle_coordinates(pts_x, pts_y, ref_x, ref_y, ref_yaw);
 						tk::spline s;
 						s.set_points(pts_x, pts_y);
-						cout << "fit ok" << endl;
 
 						// Use previous path.
 						for(int i = 0; i < previous_path_size; ++i)
@@ -444,8 +459,6 @@ int main() {
 						double target_distance = sqrt(target_x * target_x + target_y * target_y);
 						int slice = target_distance / (curr_speed_mph * MPH_TO_METERS_PER_SECOND * SIMULATION_PERIOD_SECS);
 						double x_unit = target_x / slice;
-						cout << "slice: " << slice  << endl;
-						cout << "x_unit: " << x_unit  << endl;
 
     				for(int i = 0; i < TRAJECTORY_LENGTH - previous_path_size; ++i)
 						{
