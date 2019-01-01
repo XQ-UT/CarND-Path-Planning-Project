@@ -210,18 +210,6 @@ void convert_point_to_global_coordinates(double& x, double& y,
 	y += car_y;
 }
 
-void get_left_lane_change_trajectory() {
-
-}
-
-void get_right_lane_change_trajectory() {
-
-}
-
-void get_follow_lane_trajectory() {
-
-}
-
 /// print trajectory points.
 void print_trajectory(const vector<double>& next_x_vals, const vector<double>& next_y_vals){
 	cout << "##### Print Path #####" << endl;
