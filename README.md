@@ -1,4 +1,4 @@
-# CarND-Path-Planning-Project
+# CarND Path Planning Project
 
 This project creates a simple motion planner that helps self-driving car driving on highway. The planner should
 satisfies the following requirement:
@@ -18,7 +18,7 @@ The planner behaves as following:
 /// Returns true when other car is in the same lane with my car.
 bool in_same_lane(double my_car_d, double other_car_d){
 	return other_car_d >= my_car_d - LANE_WIDTH_METERS / 2 
-									&& other_car_d <= my_car_d + LANE_WIDTH_METERS / 2;
+	       && other_car_d <= my_car_d + LANE_WIDTH_METERS / 2;
 }
 ```
 The first function checks if another car is in same lane with the AV.
@@ -33,7 +33,7 @@ The second function checks if the other car is in front of AV within a short dis
 
 We use the two functions to check every car in sensor fusion both current and future status, to determine whether it is `too_close`, `left_lane_change_safe` and `right_lane_change_safe`.
 
-2. After having `too_close`, `left_lane_change_safe` and `right_lane_change_safe` information. We change our `curr_lane` and `curr_speed_mph` accordingly.
+3. After having `too_close`, `left_lane_change_safe` and `right_lane_change_safe` information. We change our `curr_lane` and `curr_speed_mph` accordingly.
 
 ```c++
 if(too_close)
@@ -57,7 +57,7 @@ else if(curr_speed_mph < TARGET_SPEED_MPH)
 }
 ```
 
-3. Then we will choose 5 anchor points. 2 from previous path, 3 from future path.
+4. Then we will choose 5 anchor points. 2 from previous path, 3 from future path.
 
 The following block choose 3 future waypoints, which will adapts to lane change trajectory.
 ```c++
@@ -67,7 +67,7 @@ vector<double> new_wp2 = getXY(car_s + 70, new_d, map_waypoints_s, map_waypoints
 vector<double> new_wp3 = getXY(car_s + 90, new_d, map_waypoints_s, map_waypoints_x, map_waypoints_y);
 ```
 
-4. The next step is to convert anchor points to vehicle coordinates system, using following function.
+5. The next step is to convert anchor points to vehicle coordinates system, using following function.
 ```c++
 /// Converts points in global coordinates to vehicle coordinates.
 void convert_points_to_vehicle_coordinates(vector<double>& pts_x, vector<double>& pts_y, 
@@ -82,6 +82,17 @@ void convert_points_to_vehicle_coordinates(vector<double>& pts_x, vector<double>
 	}
 }
 ```
+
+Then we use `spline` to fit those anchor points.
+```c++
+// Fit anchor points in vehicle coordinate.
+convert_points_to_vehicle_coordinates(pts_x, pts_y, ref_x, ref_y, ref_yaw);
+tk::spline s;
+s.set_points(pts_x, pts_y);
+```
+
+6. Then depending on `curr_speed_mph`, we divide the approximate trajectory for next 30 meters, convert them back to global coordinate system and add to next trajectory.
+7. All the previous path points will be added back to next path.
 
 
 ## Result
